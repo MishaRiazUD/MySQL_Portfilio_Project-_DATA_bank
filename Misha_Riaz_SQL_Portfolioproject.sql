@@ -234,21 +234,37 @@ ORDER BY 1;
 -- -------------------------------------------------------
 -- Calculate the daily data growth for each customer
 
-WITH total_allocation AS ( SELECT month_number, month, SUM(CASE WHEN monthly_allocation < 0 THEN 0 ELSE monthly_allocation END) AS total_allocation
-FROM (SELECT EXTRACT(MONTH FROM (txn_date)) AS month_number, MONTHNAME(txn_date) AS month,
-CASE WHEN txn_type = 'deposit' THEN txn_amount
+WITH adjusted_amount AS (
+SELECT customer_id, 
+EXTRACT(MONTH FROM(txn_date)) AS month_number,
+MONTHNAME(txn_date) AS month,
+SUM(CASE 
+WHEN txn_type = 'deposit' THEN txn_amount
 ELSE -txn_amount
-END AS monthly_allocation
-FROM customer_transactions) AS allocation
-GROUP BY month_number, month
-ORDER BY month_number, month),
-daily_data_growth AS ( SELECT month_number, month, (total_allocation * 0.06 / 365) AS daily_data_growth
-FROM total_allocation)
-SELECT d.month_number, d.month, SUM(d.daily_data_growth) AS monthly_data_growth
-FROM daily_data_growth d
-GROUP BY d.month_number, d.month
-ORDER BY d.month_number, d.month;
-
+END) AS monthly_amount
+FROM customer_transactions
+GROUP BY 1,2,3
+ORDER BY 1
+),
+interest AS (
+SELECT customer_id, month_number,month, monthly_amount,
+ROUND(((monthly_amount * 6 * 1)/(100 * 12)),2) AS interest
+FROM adjusted_amount
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3
+),
+total_earnings AS (
+SELECT customer_id, month_number, month,
+(monthly_amount + interest) as earnings
+FROM  interest
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3
+)
+SELECT month_number,month,
+SUM(CASE WHEN earnings < 0 THEN 0 ELSE earnings END) AS allocation
+FROM total_earnings
+GROUP BY 1,2
+ORDER BY 1,2;
 
 
 
